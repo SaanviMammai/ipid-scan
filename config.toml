@@ -1,0 +1,33 @@
+# ipid-scan configuration. All rate limits live here so they are easy to audit.
+
+[sources]
+# The two scanner source IPs (A and B). Both must be assigned to this machine.
+# For the lab testbed these are replaced by scripts/lab/netns_testbed.sh.
+A = "10.99.0.2"
+B = "10.99.0.3"
+# Network interface to send and sniff on. Leave "" to let scapy pick the default route.
+iface = ""
+
+[rates]
+# Hard cap on total packets per second, across all targets (design doc §6).
+max_pps = 500
+# Spacing between consecutive probes to the SAME target, in milliseconds (design doc §4).
+# Tuned in the test run. AWS's scanning guideline suggests 1 transaction/s per destination
+# service; raise this to 1000 if you scan from AWS.
+probe_gap_ms = 150
+# How long to keep listening for replies after the last probe, in seconds.
+reply_timeout_s = 2.0
+
+[probes]
+# Probes per probe type in the full set, alternating A, B, A, B, ...
+per_type = 10
+# Probe types, in the order they are sent.
+types = ["icmp", "syn", "synack"]
+# TCP destination port. Random targets use port_random; Tranco targets use port_tranco.
+port_random = 80
+port_tranco = 443
+# Base TCP source port; the probe number is added to it.
+sport_base = 40000
+
+[output]
+dir = "data/raw"

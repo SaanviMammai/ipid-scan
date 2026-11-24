@@ -1,0 +1,6 @@
+# Raw scan data contains real IP addresses: keep it out of the public repo (design doc §5)
+data/
+*.pcap
+__pycache__/
+.pytest_cache/
+.venv/
