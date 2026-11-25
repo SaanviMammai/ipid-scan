@@ -153,6 +153,39 @@ def parse_tranco(data, top=None):
     return rows
 
 
+def read_domains_csv(path):
+    """Read a *_domains.csv written by scripts/targets.py tranco."""
+    with open(path, newline="") as f:
+        return [{"rank": int(r["rank"]), "domain": r["domain"], "status": r["status"],
+                 "ips": [ip for ip in r["ips"].split(";") if ip]}
+                for r in csv.DictReader(f)]
+
+
+def one_ip_per_domain(rows, seed, excl, top=None, max_names=5):
+    """Pick one IPv4 address per domain, then de-duplicate.
+
+    Domains are taken in rank order (only rank <= top if given). If one of a
+    domain's addresses was already picked for a higher-ranked domain (a shared
+    CDN address), that one is reused, so shared servers are probed once;
+    otherwise one address is chosen at random with a fixed seed.
+    Returns a list of dicts {ip, best_rank, n_domains, domains} in rank order.
+    """
+    rng = random.Random(seed)
+    picked = {}
+    for r in sorted(rows, key=lambda r: r["rank"]):
+        if top and r["rank"] > top:
+            break
+        ips = sorted(ip for ip in r["ips"] if ip not in excl)
+        if not ips:
+            continue
+        shared = [ip for ip in ips if ip in picked]
+        ip = shared[0] if shared else rng.choice(ips)
+        t = picked.setdefault(ip, {"ip": ip, "best_rank": r["rank"], "names": []})
+        t["names"].append(r["domain"])
+    return [{"ip": t["ip"], "best_rank": t["best_rank"], "n_domains": len(t["names"]),
+             "domains": ";".join(t["names"][:max_names])} for t in picked.values()]
+
+
 def dedupe_resolved(resolved, excl, max_names=5):
     """Turn per-domain lookups into per-IP targets.
 
