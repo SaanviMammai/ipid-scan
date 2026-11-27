@@ -24,11 +24,9 @@ Opt-outs in data/exclude.txt are re-checked at scan time.
 import argparse
 import csv
 import json
-import os
 import signal
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -36,13 +34,11 @@ sys.path.insert(0, str(ROOT))
 
 from ipid import config, probes  # noqa: E402
 from ipid.classify import FULL_SET_START  # noqa: E402
+from ipid.runutil import (chown_to_sudo_user, now_iso, safe_print,  # noqa: E402
+                          stop_on_signal)
 from ipid.schedule import Interleaver, stagger_for  # noqa: E402
 from ipid.targets import (Excluder, make_excluder, one_ip_per_domain,  # noqa: E402
                           read_cidr_file, read_domains_csv)
-
-
-def now_iso():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def load_targets(args, excl):
@@ -76,33 +72,6 @@ def list_meta(path):
         except (OSError, ValueError):
             continue
     return None
-
-
-def _stop_on_signal(signum, frame):
-    raise KeyboardInterrupt
-
-
-def safe_print(*a, **kw):
-    """print() that survives a closed terminal (e.g. after SSH dropped)."""
-    try:
-        print(*a, **kw)
-    except OSError:
-        pass
-
-
-def chown_to_sudo_user(*paths):
-    uid, gid = os.environ.get("SUDO_UID"), os.environ.get("SUDO_GID")
-    if os.geteuid() != 0 or not uid:
-        return
-    uid, gid = int(uid), int(gid)
-    for top in paths:
-        top = Path(top)
-        if not top.exists():
-            continue
-        os.chown(top, uid, gid)
-        for dirpath, dirnames, filenames in os.walk(top):
-            for name in dirnames + filenames:
-                os.chown(os.path.join(dirpath, name), uid, gid)
 
 
 class Progress:
@@ -203,7 +172,7 @@ def main():
     # Ctrl+C, a dropped SSH session (SIGHUP) or kill (SIGTERM): stop cleanly and
     # still write scan_meta.json and hand the folder back.
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
-        signal.signal(sig, _stop_on_signal)
+        signal.signal(sig, stop_on_signal)
     pr.start()
     try:
         for c0 in range(0, n, args.chunk):

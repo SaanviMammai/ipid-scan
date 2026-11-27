@@ -13,11 +13,12 @@ CSE 4402 Network Security, Fall 2026, DoS/Scanning project #2.
 | `ipid/prober.py` | Rate-limited sender plus a separate sniffer; writes `sent.csv` and `replies.csv` |
 | `scripts/probe_one.py` | Probes one target and prints its IP-ID sequences |
 | `scripts/lab/netns_testbed.sh` | Local two-namespace testbed (scanner with IPs A and B, Linux target) |
-| `tests/` | Unit tests for probe encoding and reply matching |
+| `ipid/lifetime.py` | Counter lifetime logic (RQ2): gap schedule, survived/reset judgment, per-host summary |
+| `scripts/lifetime.py` | Re-probes per-destination hosts from source A after 1, 2, 4 … 64 (then 128, 256) minutes idle |
+| `tests/` | Unit tests for probe encoding and reply matching, classifier, scheduler, targets, lifetime |
 | `docs/SETUP.md` | Setting up the scanner machine and a test target |
 
-Planned next: `targets.py` (random IPs and Tranco list), `classify.py`, `scan.py`
-(many targets), `lifetime.py` (RQ2), `analysis/`.
+Planned next: `analysis/` (tables and charts).
 
 ## How replies are matched
 
@@ -51,6 +52,25 @@ sudo python3 scripts/probe_one.py <your-test-vm-ip>
 position k, source label and IP, and send time. `replies.csv` has one row per matched
 reply: target, probe type, probe number, receive time, IP-ID, TTL, DF bit and flags.
 Join the two on (target, ptype, num). `data/` is git-ignored because it holds real addresses.
+
+## Counter lifetime (RQ2)
+
+Run after the full scan, inside `tmux` (about 2 hours, up to ~8.5 if some counters never reset):
+
+```bash
+sudo .venv/bin/python3 scripts/lifetime.py data/raw/<random_run> data/raw/<tranco_run>
+```
+
+It samples up to 300 per-destination hosts per group (seed 4402), takes a baseline
+IP-ID from source A, then re-probes from A only after each gap, measured from the
+previous probe. A jump of 1..T means the counter survived the gap; a larger jump
+means a reset (or a large time-based increment, as Linux adds). Output in
+`data/raw/<run_id>-lifetime/`: `lifetime_steps.csv` (every re-probe: gap, jump,
+outcome) and `lifetime_summary.csv` (lifetime range per host and probe type, e.g.
+`4-8` minutes, `<1`, `>256`, with how the track ended: finished, gone, interrupted).
+
+Defaults can be changed in an optional `[lifetime]` section of `config.toml`:
+`per_group`, `gaps_min`, `extend_min`, `T`, `retries`, `retry_s`, `max_misses`.
 
 ## Ethics
 

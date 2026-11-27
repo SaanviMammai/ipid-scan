@@ -3,3 +3,4 @@ dnspython>=2.6
 pandas>=2.2
 matplotlib>=3.8
 pytest>=8
+tomli>=2; python_version < "3.11"

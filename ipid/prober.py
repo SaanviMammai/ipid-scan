@@ -120,6 +120,7 @@ class Prober:
                                   "src_label": p.src_label, "src_ip": p.src_ip,
                                   "dport": p.dport, "t_send": f"{t:.6f}"})
             self._sent_f.flush()
+        return t
 
     def send_spaced(self, plist):
         """Send probes to one target with probe_gap_ms between them."""

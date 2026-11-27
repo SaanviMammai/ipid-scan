@@ -29,7 +29,10 @@ def load_classify_cfg(path):
     try:
         import tomllib
     except ModuleNotFoundError:  # Python < 3.11
-        return {}
+        try:
+            import tomli as tomllib
+        except ModuleNotFoundError:
+            return {}
     with open(path, "rb") as f:
         return tomllib.load(f).get("classify", {})
 

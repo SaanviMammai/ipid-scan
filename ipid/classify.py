@@ -20,6 +20,8 @@ values (counters that step by 256), and `byteswapped` is set.
 
 This module only uses the standard library, so tests run without scapy or root.
 """
+from __future__ import annotations  # allows "int | None" on Python 3.9
+
 import csv
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
