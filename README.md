@@ -15,10 +15,12 @@ CSE 4402 Network Security, Fall 2026, DoS/Scanning project #2.
 | `scripts/lab/netns_testbed.sh` | Local two-namespace testbed (scanner with IPs A and B, Linux target) |
 | `ipid/lifetime.py` | Counter lifetime logic (RQ2): gap schedule, survived/reset judgment, per-host summary |
 | `scripts/lifetime.py` | Re-probes per-destination hosts from source A after 1, 2, 4 … 64 (then 128, 256) minutes idle |
+| `ipid/analysis.py`, `ipid/charts.py` | Result tables (response rates, categories, combinations, lifetime, jumps) and PNG charts |
+| `scripts/analyze.py` | Builds `results/<name>/`: `summary.md`, CSV tables and charts from scan and lifetime runs |
+| `scripts/lab/fake_runs.py` | Simulated runs (made-up mix, reserved 198.18.0.0/15 addresses) to preview the analysis |
 | `tests/` | Unit tests for probe encoding and reply matching, classifier, scheduler, targets, lifetime |
 | `docs/SETUP.md` | Setting up the scanner machine and a test target |
 
-Planned next: `analysis/` (tables and charts).
 
 ## How replies are matched
 
@@ -71,6 +73,24 @@ outcome) and `lifetime_summary.csv` (lifetime range per host and probe type, e.g
 
 Defaults can be changed in an optional `[lifetime]` section of `config.toml`:
 `per_group`, `gaps_min`, `extend_min`, `T`, `retries`, `retry_s`, `max_misses`.
+
+## Analysis
+
+No root needed; run it on the scanner or copy `data/raw/` runs to your laptop:
+
+```bash
+python3 scripts/analyze.py --scan data/raw/<random_run> data/raw/<tranco_run> \
+        --lifetime data/raw/<run_id>-lifetime --out results/full
+```
+
+`results/full/summary.md` has every table in markdown for the report, plus CSVs and
+`fig_categories.png`, `fig_lifetime.png`, `fig_jumps.png`. Percentages are out of
+hosts that replied to that probe type. Results hold totals only, no addresses, so
+they can be committed. If you list a pilot and the full scan of the same group,
+the run listed last wins for targets in both.
+
+Preview with simulated data: `python3 scripts/lab/fake_runs.py`, then
+`python3 scripts/analyze.py --scan data/fake/fake-random data/fake/fake-tranco --lifetime data/fake/fake-lifetime --out results/fake`.
 
 ## Ethics
 

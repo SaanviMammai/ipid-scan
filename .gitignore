@@ -4,3 +4,5 @@ data/
 __pycache__/
 .pytest_cache/
 .venv/
+# simulated results (scripts/lab/fake_runs.py), not real data
+results/fake/
