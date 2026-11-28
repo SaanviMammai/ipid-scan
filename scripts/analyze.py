@@ -55,6 +55,10 @@ def main():
 
     life = jumps = None
     steps = None
+    life_metas = []
+    for d in args.lifetime:
+        f = d / "lifetime_meta.json"
+        life_metas.append(json.loads(f.read_text()) if f.exists() else {})
     if args.lifetime:
         summ, steps = A.load_lifetimes(args.lifetime)
         life = A.lifetime_table(summ)
@@ -62,13 +66,31 @@ def main():
         life.to_csv(out / "lifetime.csv", index=False, float_format="%.2f")
         jumps.to_csv(out / "jumps.csv", index=False, float_format="%.2f")
 
+    # Label the charts honestly: simulated runs and testbed runs say so on the chart
+    # itself, so a copied PNG can't be mistaken for an Internet result.
+    all_metas = metas + life_metas
+    fake = any(m.get("fake") for m in all_metas)
+    lab = bool(metas) and all(m.get("lab") for m in metas)
+    names, note = None, ""
+    if fake:
+        note = "SIMULATED DATA (made-up mix): layout check only, not a result"
+    elif lab:
+        names = {m["group"]: "Linux testbed" for m in metas}
+        note = "LOCAL TESTBED: one Linux network namespace, not Internet hosts"
+
     figs = []
     if not args.no_charts:
         from ipid import charts
-        figs.append(charts.category_chart(cats, out / "fig_categories.png"))
+        figs.append(charts.category_chart(cats, out / "fig_categories.png", names, note))
         if life is not None:
-            figs.append(charts.lifetime_chart(life, out / "fig_lifetime.png"))
-            figs.append(charts.jump_chart(steps, out / "fig_jumps.png", args.T))
+            gaps = []
+            for m in life_metas:
+                gaps += list(m.get("gaps", [])) + list(m.get("extend", []))
+            if not gaps and steps is not None and "planned_gap" in steps:
+                gaps = steps["planned_gap"].dropna().unique().tolist()
+            figs.append(charts.lifetime_chart(life, out / "fig_lifetime.png", gaps, args.T,
+                                              names, note))
+            figs.append(charts.jump_chart(steps, out / "fig_jumps.png", args.T, names, note))
     figs = [f for f in figs if f]
 
     resp_cols = ["group", "probed", "responded", "responded_pct", "responded_icmp_pct",
@@ -77,7 +99,9 @@ def main():
           f"Generated {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC from "
           f"{len(args.scan)} scan run(s) and {len(args.lifetime)} lifetime run(s).",
           f"T = {args.T}, at least {args.min_per_src} replies per source.", ""]
-    if any(m.get("fake") for m in metas):
+    if lab and not fake:
+        md += ["> **Local testbed** (Linux network namespace): not Internet hosts.", ""]
+    if fake:
         md += ["> **Simulated data** (tests/fakedata.py): for checking the charts only, "
                "not a result.", ""]
     md += ["## Response rates", "",

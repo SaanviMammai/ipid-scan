@@ -39,12 +39,40 @@ def _style():
     })
 
 
-def _title(fig, title, subtitle):
+def _title(fig, title, subtitle, note=""):
+    """Title, subtitle and an optional second line (e.g. 'simulated data')."""
     fig.text(0.01, 0.985, title, fontsize=13, fontweight="bold", color=TEXT, va="top")
     fig.text(0.01, 0.935, subtitle, fontsize=9.5, color=TEXT2, va="top")
+    if note:
+        fig.text(0.01, 0.935 - 0.33 / fig.get_size_inches()[1], note, fontsize=9.5,
+                 color="#b3261e", fontweight="bold", va="top")
 
 
-def category_chart(cat_long, path):
+def _gname(g, names):
+    return (names or {}).get(g, GROUP_NAMES.get(g, g))
+
+
+def _top_shift(note, h):
+    """Extra headroom (as a fraction of figure height) when a note line is drawn."""
+    return 0.33 / h if note else 0.0
+
+
+def lifetime_bins(gaps, present=()):
+    """Every lifetime range the gap schedule can produce, in order, so empty ranges
+    still get a slot on the x-axis: '<g1', 'g1-g2', ..., '>gN', then any extra
+    labels seen in the data ('dropped out', 'unknown')."""
+    from ipid.lifetime import _fmt
+    gaps = sorted({float(g) for g in gaps if float(g) > 0})
+    bins = []
+    if gaps:
+        bins.append(f"<{_fmt(gaps[0])}")
+        bins += [f"{_fmt(a)}-{_fmt(b)}" for a, b in zip(gaps, gaps[1:])]
+        bins.append(f">{_fmt(gaps[-1])}")
+    extra = [b for b in present if b not in bins]
+    return bins + sorted(extra, key=_label_key)
+
+
+def category_chart(cat_long, path, names=None, note=""):
     """100% stacked horizontal bars: one per (group, probe type)."""
     _style()
     bars = []
@@ -62,13 +90,13 @@ def category_chart(cat_long, path):
         if prev is not None and g != prev:
             y += 0.6
         ys.append(y)
-        labels.append(f"{GROUP_NAMES.get(g, g)}  ·  {PTYPE_NAMES.get(p, p)}")
+        labels.append(f"{_gname(g, names)}  ·  {PTYPE_NAMES.get(p, p)}")
         y += 1
         prev = g
-    fig, ax = plt.subplots(figsize=(9, 0.55 * y + 1.9))
-    H = 0.55 * y + 1.9
-    fig.set_size_inches(9, H)
-    fig.subplots_adjust(left=0.30, right=0.90, top=1 - 1.05 / H, bottom=0.35 / H)
+    H = 0.55 * y + 1.9 + (0.33 if note else 0)
+    fig, ax = plt.subplots(figsize=(9, H))
+    fig.subplots_adjust(left=0.30, right=0.90, top=1 - (1.05 + (0.33 if note else 0)) / H,
+                        bottom=0.35 / H)
     for yy, (g, p, sel) in zip(ys, bars):
         left = 0.0
         for cat in CAT_COLORS:
@@ -95,25 +123,32 @@ def category_chart(cat_long, path):
     ax.legend(handles, [CAT_NAMES[c] for c in CAT_COLORS], ncol=5, loc="lower left",
               bbox_to_anchor=(-0.02, 1.0), fontsize=9, handlelength=1, columnspacing=1.2)
     _title(fig, "IP-ID mechanism by target group and probe type",
-           "Share of hosts that replied to that probe type; n = hosts")
+           "Share of hosts that replied to that probe type; n = hosts", note)
     fig.savefig(path)
     plt.close(fig)
     return path
 
 
-def lifetime_chart(life, path):
-    """Share of tracks per lifetime range, random vs Tranco, one panel per probe type."""
+def lifetime_chart(life, path, gaps=None, T=1000, names=None, note=""):
+    """Share of tracks per lifetime range, random vs Tranco, one panel per probe type.
+
+    gaps: the planned idle gaps (main + extended). With them, every possible range
+    gets an x slot, so an empty range shows as an empty slot instead of vanishing.
+    """
     _style()
     if life.empty:
         return None
     ptypes = [p for p in PTYPES if p in set(life["ptype"])]
     groups = [g for g in GROUPS if g in set(life["group"])]
-    bins = sorted(life["lifetime"].unique(), key=_label_key)
+    present = sorted(life["lifetime"].unique(), key=_label_key)
+    bins = lifetime_bins(gaps, present) if gaps is not None and len(gaps) else present
     unit = life["unit"].iloc[0]
-    fig, axes = plt.subplots(1, len(ptypes), figsize=(max(3.6 * len(ptypes) + 1.2, 8.5), 4.2),
+    H = 4.5 + (0.33 if note else 0)
+    fig, axes = plt.subplots(1, len(ptypes), figsize=(max(3.6 * len(ptypes) + 1.2, 8.5), H),
                              sharey=True, squeeze=False)
     axes = axes[0]
-    fig.subplots_adjust(left=0.07, right=0.99, top=0.76, bottom=0.25, wspace=0.08)
+    fig.subplots_adjust(left=0.07, right=0.99, top=0.73 - _top_shift(note, H), bottom=0.23,
+                        wspace=0.08)
     x = np.arange(len(bins))
     w = 0.8 / max(1, len(groups))
     for ax, p in zip(axes, ptypes):
@@ -122,9 +157,9 @@ def lifetime_chart(life, path):
             vals = [float(sel.loc[b, "pct"]) if b in sel.index else 0.0 for b in bins]
             ax.bar(x + (i - (len(groups) - 1) / 2) * w, vals, width=w * 0.92,
                    color=GROUP_COLORS.get(g, "#6a4ce2"), edgecolor=SURFACE, linewidth=0,
-                   label=GROUP_NAMES.get(g, g))
+                   label=_gname(g, names))
             n = int(sel["of_tracks"].iloc[0]) if len(sel) else 0
-            ax.text(0.99, 0.97 - 0.07 * i, f"{GROUP_NAMES.get(g, g)}: n={n}",
+            ax.text(0.99, 0.97 - 0.07 * i, f"{_gname(g, names)}: n={n}",
                     transform=ax.transAxes, ha="right", va="top", fontsize=8, color=TEXT2)
         ax.set_title(PTYPE_NAMES.get(p, p), fontsize=10.5, color=TEXT, loc="left")
         ax.set_xticks(x, [b if b in (CENSORED, "unknown") else b for b in bins],
@@ -136,14 +171,15 @@ def lifetime_chart(life, path):
     axes[0].legend(loc="lower left", bbox_to_anchor=(-0.02, 1.08), ncol=2, fontsize=9,
                    handlelength=1)
     _title(fig, "Per-destination counter lifetime (RQ2)",
-           f"Idle time ({unit}) the counter survived before it reset; "
-           f"'dropped out' = host stopped answering first")
+           f"Idle time ({unit}) the counter survived: a jump above T = {T:,} counts as a reset, "
+           f"so time-based jumps (Linux) also end a track early.\n"
+           f"'dropped out' = host stopped answering first. n = hosts tracked.", note)
     fig.savefig(path)
     plt.close(fig)
     return path
 
 
-def jump_chart(steps, path, T=1000):
+def jump_chart(steps, path, T=1000, names=None, note=""):
     """IP-ID jump against idle time (log-log), with the median per gap and the T line."""
     _style()
     if steps.empty:
@@ -157,10 +193,12 @@ def jump_chart(steps, path, T=1000):
     st["idle"] = pd.to_numeric(st["gap_s"], errors="coerce") / scale
     ptypes = [p for p in PTYPES if p in set(st["ptype"])]
     groups = [g for g in GROUPS if g in set(st["group"])]
-    fig, axes = plt.subplots(1, len(ptypes), figsize=(max(3.8 * len(ptypes) + 1.2, 8.5), 4.4),
+    H = 4.4 + (0.33 if note else 0)
+    fig, axes = plt.subplots(1, len(ptypes), figsize=(max(3.8 * len(ptypes) + 1.2, 8.5), H),
                              sharey=True, squeeze=False)
     axes = axes[0]
-    fig.subplots_adjust(left=0.08, right=0.99, top=0.76, bottom=0.14, wspace=0.08)
+    fig.subplots_adjust(left=0.08, right=0.99, top=0.76 - _top_shift(note, H), bottom=0.14,
+                        wspace=0.08)
     rng = np.random.default_rng(0)
     gaps = sorted(st["planned_gap"].unique())
     for ax, p in zip(axes, ptypes):
@@ -180,7 +218,7 @@ def jump_chart(steps, path, T=1000):
             med = sel[sel["planned_gap"].isin(keep)].groupby("planned_gap")["jump"].median()
             ax.plot(med.index, med.values, color=col, linewidth=2, marker="o",
                     markersize=6, markeredgecolor=SURFACE, markeredgewidth=1.5,
-                    label=f"{GROUP_NAMES.get(g, g)} (median)")
+                    label=f"{_gname(g, names)} (median)")
         ax.axhline(T, color=TEXT2, linewidth=1, linestyle=(0, (4, 3)))
         ax.text(0.98, T * 0.78, f"T = {T:,}: below = survived", transform=ax.get_yaxis_transform(),
                 ha="right", va="top", fontsize=8, color=TEXT2, bbox=dict(facecolor=SURFACE, edgecolor="none", alpha=0.85, pad=1.5))
@@ -200,7 +238,8 @@ def jump_chart(steps, path, T=1000):
     axes[0].set_yticks([1, 10, 100, 1000, 10000, 65536], ["1", "10", "100", "1k", "10k", "65k"])
     axes[0].legend(loc="lower left", bbox_to_anchor=(-0.02, 1.08), ncol=2, fontsize=9)
     _title(fig, "IP-ID jump grows with idle time (RQ2)",
-           "Dots: one re-probe from source A each. Lines: medians (longest gaps left out: only survivors reach them)")
+           "Dots: one re-probe from source A each. Lines: medians (longest gaps left out: only survivors reach them)",
+           note)
     fig.savefig(path)
     plt.close(fig)
     return path

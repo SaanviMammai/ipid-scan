@@ -125,3 +125,24 @@ def test_analyze_script_end_to_end(runs, tmp_path):
         assert (out / name).stat().st_size > 0, name
     md = (out / "summary.md").read_text()
     assert "Simulated data" in md and "198.18." not in md
+
+
+def test_lifetime_bins_keep_empty_ranges():
+    from ipid.charts import lifetime_bins
+    bins = lifetime_bins([0, 1, 2, 4, 8, 16, 32, 64, 128, 256], ["<1", "4-8", "dropped out"])
+    assert bins[:4] == ["<1", "1-2", "2-4", "4-8"]
+    assert bins[-3:] == ["128-256", ">256", "dropped out"]
+    assert lifetime_bins([1, 2, 4], ["unknown"]) == ["<1", "1-2", "2-4", ">4", "unknown"]
+
+
+def test_simulated_runs_are_marked(tmp_path):
+    import subprocess
+    root = Path(__file__).resolve().parent.parent
+    r = make_scan_run(tmp_path, "random", 300, seed=3)
+    lt = make_lifetime_run(tmp_path, [r], per_group=10)
+    out = tmp_path / "res"
+    subprocess.run([sys.executable, str(root / "scripts" / "analyze.py"), "--scan", str(r),
+                    "--lifetime", str(lt), "--out", str(out)], check=True,
+                   capture_output=True)
+    assert "Simulated data" in (out / "summary.md").read_text()
+    assert (out / "fig_lifetime.png").exists()
